@@ -1,0 +1,210 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChopLink Vendor Login</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: #fff7ed;
+  margin: 0;
+  padding: 20px;
+}
+
+.container {
+  max-width: 430px;
+  margin: 50px auto;
+  background: white;
+  padding: 28px;
+  border-radius: 15px;
+  box-shadow: 0 3px 15px #ddd;
+}
+
+h1 {
+  color: #e87519;
+  text-align: center;
+}
+
+p {
+  color: #666;
+  text-align: center;
+  line-height: 1.5;
+}
+
+input, button {
+  width: 100%;
+  padding: 14px;
+  margin: 10px 0;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+input {
+  border: 1px solid #ddd;
+}
+
+button {
+  background: #e87519;
+  color: white;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+a {
+  color: #e87519;
+  text-decoration: none;
+}
+
+#message {
+  overflow-wrap: anywhere;
+  font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🍔 ChopLink</h1>
+
+<p>Vendor Login</p>
+<p>Welcome back! Sign in to your restaurant account.</p>
+
+<form id="loginForm">
+
+<input
+  type="email"
+  id="email"
+  placeholder="Email Address"
+  autocomplete="email"
+  required
+>
+
+<input
+  type="password"
+  id="password"
+  placeholder="Password"
+  autocomplete="current-password"
+  required
+>
+
+<button type="submit" id="loginButton">
+Login to Your Account
+</button>
+
+</form>
+
+<p id="message" aria-live="polite"></p>
+
+<p>
+New to ChopLink?
+<br>
+<a href="vendor.html">Register your restaurant</a>
+</p>
+
+<p>
+<a href="index.html">Back to ChopLink homepage</a>
+</p>
+
+</div>
+
+<script type="module">
+
+import { createClient } from
+'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+const SUPABASE_URL =
+'https://ikpfnycvlbdgacrwqvwk.supabase.co';
+
+const SUPABASE_KEY =
+'sb_publishable_az3jlI2hHW6BjtjWLfZGAw_wPnSj32T';
+
+const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+const form = document.getElementById('loginForm');
+const message = document.getElementById('message');
+const button = document.getElementById('loginButton');
+
+form.addEventListener('submit', async function(event) {
+
+  event.preventDefault();
+
+  button.disabled = true;
+  message.textContent = 'Signing in...';
+
+  try {
+
+    const email =
+      document.getElementById('email').value.trim();
+
+    const password =
+      document.getElementById('password').value;
+
+    const { data, error } =
+      await supabase.auth.signInWithPassword({
+        email: email,
+        password: password
+      });
+
+    if (error) throw error;
+
+    const pending =
+      localStorage.getItem('choplink_pending_vendor');
+
+    if (pending) {
+
+      const details = JSON.parse(pending);
+
+      const { error: profileError } =
+        await supabase.from('vendors').insert({
+          user_id: data.user.id,
+          business_name: details.business_name,
+          owner_name: details.owner_name,
+          phone: details.phone,
+          address: details.address,
+          city: details.city
+        });
+
+      if (profileError && profileError.code !== '23505') {
+        throw profileError;
+      }
+
+      localStorage.removeItem('choplink_pending_vendor');
+    }
+
+    message.textContent =
+      'Login successful! Welcome to ChopLink. Your vendor account is ready for the next step.';
+
+  } catch (error) {
+
+    message.textContent =
+      'Login error: ' + error.message;
+
+  } finally {
+
+    button.disabled = false;
+
+  }
+
+});
+
+</script>
+
+</body>
+</html>
