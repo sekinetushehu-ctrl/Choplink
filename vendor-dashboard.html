@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChopLink Vendor Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#fff8ef;color:#292929}
+header{background:#f47b20;color:white;padding:20px}
+header h2{margin:0}
+main{max-width:850px;margin:auto;padding:18px}
+.card{background:white;padding:18px;border-radius:12px;margin:15px 0;box-shadow:0 2px 9px #00000012}
+input,textarea{width:100%;padding:13px;margin:8px 0;border:1px solid #ddd;border-radius:7px;font-size:16px}
+button{background:#f47b20;color:white;border:0;padding:12px 16px;border-radius:7px;font-size:15px;margin:5px 3px;cursor:pointer}
+button.delete{background:#c62828}
+button.secondary{background:#555}
+.food{border-bottom:1px solid #eee;padding:14px 0}
+.food h3{margin:5px 0}
+.price{color:#e66d12;font-weight:bold}
+#message{font-weight:bold}
+</style>
+</head>
+<body>
+
+<header>
+<h2>🍲 ChopLink Vendor Dashboard</h2>
+<p>Manage your restaurant and food menu</p>
+</header>
+
+<main>
+<div class="card">
+<h3>Welcome to ChopLink</h3>
+<p id="vendorName">Checking your account...</p>
+<button class="secondary" onclick="logout()">Logout</button>
+</div>
+
+<div class="card">
+<h3>➕ Add New Food</h3>
+<input id="foodName" placeholder="Food name (e.g. Smoky Jollof Rice)">
+<textarea id="description" placeholder="Food description"></textarea>
+<input id="price" type="number" min="1" placeholder="Price in Naira">
+<button onclick="addFood()">Add Food</button>
+<p id="message"></p>
+</div>
+
+<div class="card">
+<h3>My Food Menu</h3>
+<div id="foodList">Loading your menu...</div>
+</div>
+</main>
+
+<script>
+const SUPABASE_URL = "https://ikpfnycvlbdgacrwqvwk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_az3jlI2hHW6BjtjWLfZGAw_wPnSj32T";
+
+const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentVendor = null;
+
+async function startDashboard(){
+  const {data:{session},error} = await client.auth.getSession();
+
+  if(error || !session){
+    alert("Please log in as a vendor first.");
+    window.location.href = "vendor-login.html";
+    return;
+  }
+
+  const {data:vendor,error:vendorError} = await client
+    .from("vendors")
+    .select("*")
+    .eq("user_id",session.user.id)
+    .maybeSingle();
+
+  if(vendorError || !vendor){
+    alert("Vendor profile not found. Please register or contact support.");
+    return;
+  }
+
+  currentVendor = vendor;
+  document.getElementById("vendorName").textContent =
+    "Restaurant: " + vendor.business_name;
+
+  loadFoods();
+}
+
+async function addFood(){
+  const name = document.getElementById("foodName").value.trim();
+  const description = document.getElementById("description").value.trim();
+  const price = Number(document.getElementById("price").value);
+  const message = document.getElementById("message");
+
+  if(!currentVendor){
+    message.textContent = "Please log in first.";
+    return;
+  }
+
+  if(!name || !price || price <= 0){
+    message.textContent = "Enter a food name and a valid price.";
+    return;
+  }
+
+  message.textContent = "Adding food...";
+
+  const {error} = await client.from("food_items").insert({
+    vendor_id: currentVendor.id,
+    food_name: name,
+    description: description,
+    price: price
+  });
+
+  if(error){
+    message.textContent = "Error: " + error.message;
+    return;
+  }
+
+  message.textContent = "Food added successfully!";
+  document.getElementById("foodName").value = "";
+  document.getElementById("description").value = "";
+  document.getElementById("price").value = "";
+
+  loadFoods();
+}
+
+async function loadFoods(){
+  if(!currentVendor) return;
+
+  const list = document.getElementById("foodList");
+  list.textContent = "Loading...";
+
+  const {data,error} = await client
+    .from("food_items")
+    .select("*")
+    .eq("vendor_id",currentVendor.id)
+    .order("created_at",{ascending:false});
+
+  if(error){
+    list.textContent = "Error: " + error.message;
+    return;
+  }
+
+  if(!data || data.length === 0){
+    list.textContent = "You have not added any food yet.";
+    return;
+  }
+
+  list.innerHTML = "";
+
+  data.forEach(food=>{
+    const item = document.createElement("div");
+    item.className = "food";
+
+    const title = document.createElement("h3");
+    title.textContent = food.food_name;
+
+    const desc = document.createElement("p");
+    desc.textContent = food.description || "";
+
+    const price = document.createElement("p");
+    price.className = "price";
+    price.textContent = "₦" + Number(food.price).toLocaleString("en-NG");
+
+    const status = document.createElement("p");
+    status.textContent = food.is_available ? "Available" : "Unavailable";
+
+    const toggle = document.createElement("button");
+    toggle.textContent = food.is_available ? "Mark unavailable" : "Make available";
+    toggle.onclick = ()=>toggleFood(food.id,food.is_available);
+
+    const remove = document.createElement("button");
+    remove.textContent = "Delete";
+    remove.className = "delete";
+    remove.onclick = ()=>deleteFood(food.id);
+
+    item.append(title,desc,price,status,toggle,remove);
+    list.appendChild(item);
+  });
+}
+
+async function toggleFood(id,currentStatus){
+  const {error} = await client
+    .from("food_items")
+    .update({is_available:!currentStatus})
+    .eq("id",id)
+    .eq("vendor_id",currentVendor.id);
+
+  if(error){
+    alert("Could not update food: " + error.message);
+    return;
+  }
+
+  loadFoods();
+}
+
+async function deleteFood(id){
+  if(!confirm("Are you sure you want to delete this food?")) return;
+
+  const {error} = await client
+    .from("food_items")
+    .delete()
+    .eq("id",id)
+    .eq("vendor_id",currentVendor.id);
+
+  if(error){
+    alert("Could not delete food: " + error.message);
+    return;
+  }
+
+  alert("Food deleted successfully.");
+  loadFoods();
+}
+
+async function logout(){
+  await client.auth.signOut();
+  window.location.href = "vendor-login.html";
+}
+
+startDashboard();
+</script>
+</body>
+</html>
