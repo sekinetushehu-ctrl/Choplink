@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChopLink - All Meals</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#fff8ef;font-family:Arial,sans-serif;color:#292929}
+header{background:#f47b20;color:white;padding:22px 16px}
+header h1{margin:0}
+header p{margin-bottom:0}
+main{max-width:1000px;margin:auto;padding:16px}
+input{width:100%;padding:14px;border:1px solid #ddd;border-radius:9px;font-size:16px;margin:12px 0}
+#foodList{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}
+.food{background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 9px #00000012}
+.food img{width:100%;height:170px;object-fit:cover;background:#eee}
+.food-content{padding:14px}
+.food h3{margin:0 0 8px}
+.vendor{color:#777;font-size:14px}
+.price{color:#e66d12;font-weight:bold;font-size:18px}
+button{background:#f47b20;color:white;border:0;padding:12px 18px;border-radius:7px;font-size:15px;cursor:pointer}
+#status{text-align:center;padding:15px}
+</style>
+</head>
+<body>
+
+<header>
+<h1>🍲 ChopLink</h1>
+<p>Discover delicious meals from restaurants around you.</p>
+</header>
+
+<main>
+<h2>Explore All Meals</h2>
+<input id="search" placeholder="Search for food or restaurant...">
+<p id="status">Loading meals...</p>
+<div id="foodList"></div>
+</main>
+
+<script>
+const SUPABASE_URL = "https://ikpfnycvlbdgacrwqvwk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_az3jlI2hHW6BjtjWLfZGAw_wPnSj32T";
+
+const client = supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+let allFoods = [];
+
+async function loadFoods(){
+  const status = document.getElementById("status");
+  const list = document.getElementById("foodList");
+
+  status.textContent = "Loading meals...";
+
+  const {data,error} = await client
+    .from("customer_food_menu")
+    .select("*")
+    .order("food_name");
+
+  if(error){
+    status.textContent = "Unable to load meals: " + error.message;
+    return;
+  }
+
+  allFoods = data || [];
+  displayFoods(allFoods);
+}
+
+function displayFoods(foods){
+  const list = document.getElementById("foodList");
+  const status = document.getElementById("status");
+
+  list.innerHTML = "";
+
+  if(foods.length === 0){
+    status.textContent = "No meals available yet. Please check again later.";
+    return;
+  }
+
+  status.textContent = foods.length + " meals available";
+
+  foods.forEach(food=>{
+    const card = document.createElement("div");
+    card.className = "food";
+
+    const img = document.createElement("img");
+    img.src = food.image_url || "https://placehold.co/600x400?text=ChopLink+Meal";
+    img.alt = food.food_name;
+    img.onerror = ()=>{img.src="https://placehold.co/600x400?text=ChopLink+Meal"};
+
+    const content = document.createElement("div");
+    content.className = "food-content";
+
+    const name = document.createElement("h3");
+    name.textContent = food.food_name;
+
+    const vendor = document.createElement("p");
+    vendor.className = "vendor";
+    vendor.textContent = "Restaurant: " + food.business_name;
+
+    const description = document.createElement("p");
+    description.textContent = food.description || "";
+
+    const price = document.createElement("p");
+    price.className = "price";
+    price.textContent = "₦" + Number(food.price).toLocaleString("en-NG");
+
+    content.append(name,vendor,description,price);
+    card.append(img,content);
+    list.appendChild(card);
+  });
+}
+
+document.getElementById("search").addEventListener("input",function(){
+  const term = this.value.toLowerCase().trim();
+
+  displayFoods(allFoods.filter(food=>
+    food.food_name.toLowerCase().includes(term) ||
+    food.business_name.toLowerCase().includes(term)
+  ));
+});
+
+loadFoods();
+</script>
+</body>
+</html>
