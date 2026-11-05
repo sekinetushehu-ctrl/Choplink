@@ -1,0 +1,234 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChopLink - Vendor Registration</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: #fff7ed;
+  margin: 0;
+  padding: 20px;
+}
+
+.container {
+  max-width: 450px;
+  margin: 30px auto;
+  background: white;
+  padding: 25px;
+  border-radius: 15px;
+  box-shadow: 0 3px 15px #ddd;
+}
+
+h1 {
+  text-align: center;
+  color: #e87519;
+}
+
+p {
+  text-align: center;
+  color: #666;
+  line-height: 1.5;
+}
+
+input, button {
+  width: 100%;
+  padding: 14px;
+  margin: 9px 0;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+input {
+  border: 1px solid #ddd;
+}
+
+button {
+  background: #e87519;
+  color: white;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+#message {
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🍔 ChopLink</h1>
+<p>Register your restaurant and start selling with ChopLink!</p>
+
+<form id="vendorForm">
+
+<input id="business" placeholder="Restaurant / Business Name" required>
+
+<input id="owner" placeholder="Owner's Full Name" required>
+
+<input id="phone" type="tel" placeholder="Phone Number" required>
+
+<input id="email" type="email" placeholder="Email Address" required>
+
+<input id="password" type="password"
+placeholder="Create Password (minimum 8 characters)"
+minlength="8" required>
+
+<input id="address" placeholder="Business Address" required>
+
+<input id="city" placeholder="City" value="Abuja" required>
+
+<button type="submit" id="submitBtn">
+Register My Restaurant
+</button>
+
+</form>
+
+<p id="message" aria-live="polite"></p>
+
+</div>
+
+<script type="module">
+import { createClient } from
+'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+const SUPABASE_URL =
+'https://ikpfnycvlbdgacrwqvwk.supabase.co';
+
+const SUPABASE_KEY =
+'sb_publishable_az3jlI2hHW6BjtjWLfZGAw_wPnSj32T';
+
+const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+const form = document.getElementById('vendorForm');
+const message = document.getElementById('message');
+const button = document.getElementById('submitBtn');
+
+function getVendorDetails() {
+  return {
+    business_name: document.getElementById('business').value.trim(),
+    owner_name: document.getElementById('owner').value.trim(),
+    phone: document.getElementById('phone').value.trim(),
+    address: document.getElementById('address').value.trim(),
+    city: document.getElementById('city').value.trim()
+  };
+}
+
+async function saveVendorProfile(user, details) {
+  const { error } = await supabase
+    .from('vendors')
+    .insert({
+      user_id: user.id,
+      ...details
+    });
+
+  if (error) {
+    if (error.code === '23505') {
+      message.textContent =
+        'Your vendor profile has already been registered.';
+      return;
+    }
+    throw error;
+  }
+
+  localStorage.removeItem('choplink_pending_vendor');
+
+  message.textContent =
+    'Success! Your restaurant registration is complete and awaiting approval.';
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  button.disabled = true;
+  message.textContent = 'Please wait...';
+
+  try {
+    const details = getVendorDetails();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    localStorage.setItem(
+      'choplink_pending_vendor',
+      JSON.stringify(details)
+    );
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: details.owner_name,
+          account_type: 'vendor'
+        }
+      }
+    });
+
+    if (error) throw error;
+
+    if (data.session) {
+      await saveVendorProfile(data.user, details);
+    } else {
+      message.textContent =
+        'Your account has been created. Please check your email and confirm your address. Then return to this page to complete your restaurant registration.';
+    }
+
+  } catch (error) {
+    message.textContent = 'Error: ' + error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+async function completePendingRegistration() {
+  try {
+    const pending = localStorage.getItem(
+      'choplink_pending_vendor'
+    );
+
+    if (!pending) return;
+
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error) throw error;
+
+    if (data.session) {
+      const details = JSON.parse(pending);
+      await saveVendorProfile(data.session.user, details);
+    }
+
+  } catch (error) {
+    message.textContent = 'Error: ' + error.message;
+  }
+}
+
+completePendingRegistration();
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if (session && event === 'SIGNED_IN') {
+    completePendingRegistration();
+  }
+});
+</script>
+
+</body>
+</html>
