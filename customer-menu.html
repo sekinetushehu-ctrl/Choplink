@@ -1,10 +1,12 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChopLink - All Meals</title>
+<title>ChopLink - Order Food</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#fff8ef;font-family:Arial,sans-serif;color:#292929}
@@ -21,11 +23,19 @@ input{width:100%;padding:14px;border:1px solid #ddd;border-radius:9px;font-size:
 .vendor{color:#777;font-size:14px}
 .price{color:#e66d12;font-weight:bold;font-size:18px}
 button{background:#f47b20;color:white;border:0;padding:12px 18px;border-radius:7px;font-size:15px;cursor:pointer}
+button:disabled{opacity:.5}
 #status{text-align:center;padding:15px}
+#cart{background:white;padding:16px;border-radius:12px;margin:24px 0;box-shadow:0 2px 9px #00000012}
+.cart-item{display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid #eee;padding:12px 0}
+.cart-controls{display:flex;align-items:center;gap:8px}
+.cart-controls button{padding:7px 12px}
+.remove{background:#777}
+#cartTotal{font-size:20px;font-weight:bold;color:#e66d12}
+#checkout{width:100%;margin-top:10px}
 </style>
 </head>
-<body>
 
+<body>
 <header>
 <h1>🍲 ChopLink</h1>
 <p>Discover delicious meals from restaurants around you.</p>
@@ -36,6 +46,13 @@ button{background:#f47b20;color:white;border:0;padding:12px 18px;border-radius:7
 <input id="search" placeholder="Search for food or restaurant...">
 <p id="status">Loading meals...</p>
 <div id="foodList"></div>
+
+<section id="cart">
+<h2>🛒 Your Shopping Cart</h2>
+<div id="cartItems">Your cart is empty.</div>
+<p id="cartTotal">Total: ₦0</p>
+<button id="checkout">Proceed to Checkout</button>
+</section>
 </main>
 
 <script>
@@ -45,10 +62,14 @@ const SUPABASE_KEY = "sb_publishable_az3jlI2hHW6BjtjWLfZGAw_wPnSj32T";
 const client = supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 let allFoods = [];
+let cart = [];
+
+function naira(amount){
+  return "₦" + Number(amount).toLocaleString("en-NG");
+}
 
 async function loadFoods(){
   const status = document.getElementById("status");
-  const list = document.getElementById("foodList");
 
   status.textContent = "Loading meals...";
 
@@ -73,7 +94,7 @@ function displayFoods(foods){
   list.innerHTML = "";
 
   if(foods.length === 0){
-    status.textContent = "No meals available yet. Please check again later.";
+    status.textContent = "No meals available yet.";
     return;
   }
 
@@ -86,7 +107,9 @@ function displayFoods(foods){
     const img = document.createElement("img");
     img.src = food.image_url || "https://placehold.co/600x400?text=ChopLink+Meal";
     img.alt = food.food_name;
-    img.onerror = ()=>{img.src="https://placehold.co/600x400?text=ChopLink+Meal"};
+    img.onerror = ()=>{
+      img.src = "https://placehold.co/600x400?text=ChopLink+Meal";
+    };
 
     const content = document.createElement("div");
     content.className = "food-content";
@@ -103,24 +126,129 @@ function displayFoods(foods){
 
     const price = document.createElement("p");
     price.className = "price";
-    price.textContent = "₦" + Number(food.price).toLocaleString("en-NG");
+    price.textContent = naira(food.price);
 
-    content.append(name,vendor,description,price);
+    const addButton = document.createElement("button");
+    addButton.textContent = "Add to Cart";
+    addButton.addEventListener("click",()=>{
+      addToCart(food);
+    });
+
+    content.append(name,vendor,description,price,addButton);
     card.append(img,content);
     list.appendChild(card);
   });
+}
+
+function addToCart(food){
+  const existing = cart.find(item=>item.id === food.id);
+
+  if(existing){
+    existing.quantity++;
+  }else{
+    cart.push({
+      id:food.id,
+      food_name:food.food_name,
+      business_name:food.business_name,
+      price:Number(food.price),
+      quantity:1
+    });
+  }
+
+  displayCart();
+}
+
+function changeQuantity(id,change){
+  const item = cart.find(item=>item.id === id);
+
+  if(!item)return;
+
+  item.quantity += change;
+
+  if(item.quantity <= 0){
+    cart = cart.filter(item=>item.id !== id);
+  }
+
+  displayCart();
+}
+
+function displayCart(){
+  const container = document.getElementById("cartItems");
+  const totalDisplay = document.getElementById("cartTotal");
+
+  container.innerHTML = "";
+
+  if(cart.length === 0){
+    container.textContent = "Your cart is empty.";
+  }
+
+  let total = 0;
+
+  cart.forEach(item=>{
+    total += item.price * item.quantity;
+
+    const row = document.createElement("div");
+    row.className = "cart-item";
+
+    const details = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = item.food_name;
+
+    const restaurant = document.createElement("p");
+    restaurant.className = "vendor";
+    restaurant.textContent = item.business_name;
+
+    const amount = document.createElement("p");
+    amount.textContent = naira(item.price * item.quantity);
+
+    details.append(name,restaurant,amount);
+
+    const controls = document.createElement("div");
+    controls.className = "cart-controls";
+
+    const minus = document.createElement("button");
+    minus.textContent = "−";
+    minus.addEventListener("click",()=>{
+      changeQuantity(item.id,-1);
+    });
+
+    const quantity = document.createElement("span");
+    quantity.textContent = item.quantity;
+
+    const plus = document.createElement("button");
+    plus.textContent = "+";
+    plus.addEventListener("click",()=>{
+      changeQuantity(item.id,1);
+    });
+
+    controls.append(minus,quantity,plus);
+    row.append(details,controls);
+    container.appendChild(row);
+  });
+
+  totalDisplay.textContent = "Total: " + naira(total);
 }
 
 document.getElementById("search").addEventListener("input",function(){
   const term = this.value.toLowerCase().trim();
 
   displayFoods(allFoods.filter(food=>
-    food.food_name.toLowerCase().includes(term) ||
-    food.business_name.toLowerCase().includes(term)
+    (food.food_name || "").toLowerCase().includes(term) ||
+    (food.business_name || "").toLowerCase().includes(term)
   ));
 });
 
+document.getElementById("checkout").addEventListener("click",()=>{
+  if(cart.length === 0){
+    alert("Please add a meal to your cart first.");
+    return;
+  }
+
+  alert("Your cart is ready! Customer checkout and payment will be connected in the next step.");
+});
+
 loadFoods();
+displayCart();
 </script>
 </body>
 </html>
