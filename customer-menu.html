@@ -14,7 +14,8 @@ header{background:#f47b20;color:white;padding:22px 16px}
 header h1{margin:0}
 header p{margin-bottom:0}
 main{max-width:1000px;margin:auto;padding:16px}
-input{width:100%;padding:14px;border:1px solid #ddd;border-radius:9px;font-size:16px;margin:12px 0}
+input,textarea,select{width:100%;padding:14px;border:1px solid #ddd;border-radius:9px;font-size:16px;margin:8px 0 14px}
+textarea{min-height:85px;resize:vertical}
 #foodList{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}
 .food{background:white;border-radius:12px;overflow:hidden;box-shadow:0 2px 9px #00000012}
 .food img{width:100%;height:170px;object-fit:cover;background:#eee}
@@ -23,15 +24,16 @@ input{width:100%;padding:14px;border:1px solid #ddd;border-radius:9px;font-size:
 .vendor{color:#777;font-size:14px}
 .price{color:#e66d12;font-weight:bold;font-size:18px}
 button{background:#f47b20;color:white;border:0;padding:12px 18px;border-radius:7px;font-size:15px;cursor:pointer}
-button:disabled{opacity:.5}
+button:disabled{opacity:.5;cursor:not-allowed}
 #status{text-align:center;padding:15px}
-#cart{background:white;padding:16px;border-radius:12px;margin:24px 0;box-shadow:0 2px 9px #00000012}
+#cart,#checkoutForm{background:white;padding:16px;border-radius:12px;margin:24px 0;box-shadow:0 2px 9px #00000012}
 .cart-item{display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid #eee;padding:12px 0}
 .cart-controls{display:flex;align-items:center;gap:8px}
 .cart-controls button{padding:7px 12px}
-.remove{background:#777}
 #cartTotal{font-size:20px;font-weight:bold;color:#e66d12}
-#checkout{width:100%;margin-top:10px}
+#placeOrder{width:100%;margin-top:10px}
+#checkoutStatus{font-weight:bold;margin-top:12px}
+label{font-weight:bold}
 </style>
 </head>
 
@@ -51,7 +53,31 @@ button:disabled{opacity:.5}
 <h2>🛒 Your Shopping Cart</h2>
 <div id="cartItems">Your cart is empty.</div>
 <p id="cartTotal">Total: ₦0</p>
-<button id="checkout">Proceed to Checkout</button>
+</section>
+
+<section id="checkoutForm">
+<h2>📦 Customer Checkout</h2>
+<p>Enter your details to place your order.</p>
+
+<form id="orderForm">
+<label for="customerName">Full name</label>
+<input id="customerName" type="text" placeholder="Enter your full name" required>
+
+<label for="customerPhone">Phone number</label>
+<input id="customerPhone" type="tel" placeholder="Enter your phone number" required>
+
+<label for="deliveryAddress">Delivery address</label>
+<textarea id="deliveryAddress" placeholder="Enter your complete delivery address" required></textarea>
+
+<label for="paymentMethod">Payment method</label>
+<select id="paymentMethod">
+<option value="cash_on_delivery">Cash on Delivery</option>
+<option value="online" disabled>Online Payment - Coming Soon</option>
+</select>
+
+<button id="placeOrder" type="submit">Place My Order</button>
+<p id="checkoutStatus" aria-live="polite"></p>
+</form>
 </section>
 </main>
 
@@ -70,7 +96,6 @@ function naira(amount){
 
 async function loadFoods(){
   const status = document.getElementById("status");
-
   status.textContent = "Loading meals...";
 
   const {data,error} = await client
@@ -90,7 +115,6 @@ async function loadFoods(){
 function displayFoods(foods){
   const list = document.getElementById("foodList");
   const status = document.getElementById("status");
-
   list.innerHTML = "";
 
   if(foods.length === 0){
@@ -130,9 +154,7 @@ function displayFoods(foods){
 
     const addButton = document.createElement("button");
     addButton.textContent = "Add to Cart";
-    addButton.addEventListener("click",()=>{
-      addToCart(food);
-    });
+    addButton.addEventListener("click",()=>addToCart(food));
 
     content.append(name,vendor,description,price,addButton);
     card.append(img,content);
@@ -160,7 +182,6 @@ function addToCart(food){
 
 function changeQuantity(id,change){
   const item = cart.find(item=>item.id === id);
-
   if(!item)return;
 
   item.quantity += change;
@@ -191,6 +212,7 @@ function displayCart(){
     row.className = "cart-item";
 
     const details = document.createElement("div");
+
     const name = document.createElement("strong");
     name.textContent = item.food_name;
 
@@ -208,18 +230,14 @@ function displayCart(){
 
     const minus = document.createElement("button");
     minus.textContent = "−";
-    minus.addEventListener("click",()=>{
-      changeQuantity(item.id,-1);
-    });
+    minus.addEventListener("click",()=>changeQuantity(item.id,-1));
 
     const quantity = document.createElement("span");
     quantity.textContent = item.quantity;
 
     const plus = document.createElement("button");
     plus.textContent = "+";
-    plus.addEventListener("click",()=>{
-      changeQuantity(item.id,1);
-    });
+    plus.addEventListener("click",()=>changeQuantity(item.id,1));
 
     controls.append(minus,quantity,plus);
     row.append(details,controls);
@@ -238,13 +256,67 @@ document.getElementById("search").addEventListener("input",function(){
   ));
 });
 
-document.getElementById("checkout").addEventListener("click",()=>{
+document.getElementById("orderForm").addEventListener("submit",async function(event){
+  event.preventDefault();
+
+  const status = document.getElementById("checkoutStatus");
+  const button = document.getElementById("placeOrder");
+
   if(cart.length === 0){
-    alert("Please add a meal to your cart first.");
+    status.textContent = "Please add a meal to your cart first.";
+    status.style.color = "red";
     return;
   }
 
-  alert("Your cart is ready! Customer checkout and payment will be connected in the next step.");
+  const customerName = document.getElementById("customerName").value.trim();
+  const phone = document.getElementById("customerPhone").value.trim();
+  const address = document.getElementById("deliveryAddress").value.trim();
+  const paymentMethod = document.getElementById("paymentMethod").value;
+
+  if(!customerName || !phone || !address){
+    status.textContent = "Please complete all your details.";
+    status.style.color = "red";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Submitting order...";
+  status.textContent = "Please wait while we submit your order.";
+  status.style.color = "#555";
+
+  const items = cart.map(item=>({
+    food_id:item.id,
+    quantity:item.quantity
+  }));
+
+  try{
+    const {data,error} = await client.rpc("submit_choplink_order",{
+      p_customer_name:customerName,
+      p_phone:phone,
+      p_delivery_address:address,
+      p_payment_method:paymentMethod,
+      p_items:items
+    });
+
+    if(error){
+      throw error;
+    }
+
+    status.textContent = "Order placed successfully! Your order reference is: " + data;
+    status.style.color = "green";
+
+    cart = [];
+    displayCart();
+
+    document.getElementById("orderForm").reset();
+
+  }catch(error){
+    status.textContent = "Order failed: " + error.message;
+    status.style.color = "red";
+  }finally{
+    button.disabled = false;
+    button.textContent = "Place My Order";
+  }
 });
 
 loadFoods();
