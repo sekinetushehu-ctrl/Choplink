@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ChopLink Vendor Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,sans-serif;background:#fff8ef;color:#292929}
@@ -12,24 +14,32 @@ header{background:#f47b20;color:white;padding:20px}
 header h2{margin:0}
 main{max-width:850px;margin:auto;padding:18px}
 .card{background:white;padding:18px;border-radius:12px;margin:15px 0;box-shadow:0 2px 9px #00000012}
-input,textarea{width:100%;padding:13px;margin:8px 0;border:1px solid #ddd;border-radius:7px;font-size:16px}
+input,textarea,select{width:100%;padding:13px;margin:8px 0;border:1px solid #ddd;border-radius:7px;font-size:16px}
 button{background:#f47b20;color:white;border:0;padding:12px 16px;border-radius:7px;font-size:15px;margin:5px 3px;cursor:pointer}
 button.delete{background:#c62828}
 button.secondary{background:#555}
-.food{border-bottom:1px solid #eee;padding:14px 0}
+button:disabled{opacity:.5}
+.food,.order-item{border-bottom:1px solid #eee;padding:14px 0}
 .food h3{margin:5px 0}
 .price{color:#e66d12;font-weight:bold}
 #message{font-weight:bold}
+.order-card{border:1px solid #eee;border-radius:9px;padding:14px;margin:15px 0}
+.order-card h3{margin-top:0;color:#e66d12}
+.order-item{padding:12px 0}
+.order-details{line-height:1.7}
+.status-label{font-weight:bold;color:#e66d12}
+.small{color:#777;font-size:13px}
 </style>
 </head>
-<body>
 
+<body>
 <header>
 <h2>🍲 ChopLink Vendor Dashboard</h2>
-<p>Manage your restaurant and food menu</p>
+<p>Manage your restaurant, menu and customer orders.</p>
 </header>
 
 <main>
+
 <div class="card">
 <h3>Welcome to ChopLink</h3>
 <p id="vendorName">Checking your account...</p>
@@ -46,9 +56,17 @@ button.secondary{background:#555}
 </div>
 
 <div class="card">
-<h3>My Food Menu</h3>
+<h3>🍽️ My Food Menu</h3>
 <div id="foodList">Loading your menu...</div>
 </div>
+
+<div class="card">
+<h3>📦 Customer Orders</h3>
+<p class="small">Orders containing meals from your restaurant.</p>
+<button onclick="loadOrders()">Refresh Orders</button>
+<div id="ordersList">Loading customer orders...</div>
+</div>
+
 </main>
 
 <script>
@@ -58,6 +76,10 @@ const SUPABASE_KEY = "sb_publishable_az3jlI2hHW6BjtjWLfZGAw_wPnSj32T";
 const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentVendor = null;
+
+function naira(amount){
+  return "₦" + Number(amount).toLocaleString("en-NG");
+}
 
 async function startDashboard(){
   const {data:{session},error} = await client.auth.getSession();
@@ -80,10 +102,12 @@ async function startDashboard(){
   }
 
   currentVendor = vendor;
+
   document.getElementById("vendorName").textContent =
     "Restaurant: " + vendor.business_name;
 
   loadFoods();
+  loadOrders();
 }
 
 async function addFood(){
@@ -125,7 +149,7 @@ async function addFood(){
 }
 
 async function loadFoods(){
-  if(!currentVendor) return;
+  if(!currentVendor)return;
 
   const list = document.getElementById("foodList");
   list.textContent = "Loading...";
@@ -160,7 +184,7 @@ async function loadFoods(){
 
     const price = document.createElement("p");
     price.className = "price";
-    price.textContent = "₦" + Number(food.price).toLocaleString("en-NG");
+    price.textContent = naira(food.price);
 
     const status = document.createElement("p");
     status.textContent = food.is_available ? "Available" : "Unavailable";
@@ -195,7 +219,7 @@ async function toggleFood(id,currentStatus){
 }
 
 async function deleteFood(id){
-  if(!confirm("Are you sure you want to delete this food?")) return;
+  if(!confirm("Are you sure you want to delete this food?"))return;
 
   const {error} = await client
     .from("food_items")
@@ -210,6 +234,153 @@ async function deleteFood(id){
 
   alert("Food deleted successfully.");
   loadFoods();
+}
+
+async function loadOrders(){
+  if(!currentVendor)return;
+
+  const list = document.getElementById("ordersList");
+  list.textContent = "Loading customer orders...";
+
+  const {data,error} = await client
+    .from("vendor_orders")
+    .select("*")
+    .order("created_at",{ascending:false});
+
+  if(error){
+    list.textContent = "Could not load orders: " + error.message;
+    return;
+  }
+
+  if(!data || data.length === 0){
+    list.textContent = "No customer orders yet.";
+    return;
+  }
+
+  list.innerHTML = "";
+
+  const grouped = {};
+
+  data.forEach(item=>{
+    if(!grouped[item.order_id]){
+      grouped[item.order_id] = {
+        id:item.order_id,
+        created_at:item.created_at,
+        customer_name:item.customer_name,
+        phone:item.phone,
+        address:item.delivery_address,
+        payment:item.payment_method,
+        items:[]
+      };
+    }
+
+    grouped[item.order_id].items.push(item);
+  });
+
+  Object.values(grouped).forEach(order=>{
+    const card = document.createElement("div");
+    card.className = "order-card";
+
+    const heading = document.createElement("h3");
+    heading.textContent = "Customer Order";
+
+    const reference = document.createElement("p");
+    reference.className = "small";
+    reference.textContent = "Order reference: " + order.id;
+
+    const customer = document.createElement("div");
+    customer.className = "order-details";
+    customer.textContent =
+      "Customer: " + order.customer_name +
+      "\nPhone: " + order.phone +
+      "\nDelivery address: " + order.address +
+      "\nPayment: " +
+      (order.payment === "cash_on_delivery" ? "Cash on Delivery" : "Online");
+
+    customer.style.whiteSpace = "pre-line";
+
+    const date = document.createElement("p");
+    date.className = "small";
+    date.textContent = "Order date: " + new Date(order.created_at).toLocaleString();
+
+    card.append(heading,reference,customer,date);
+
+    order.items.forEach(item=>{
+      const itemBox = document.createElement("div");
+      itemBox.className = "order-item";
+
+      const foodName = document.createElement("strong");
+      foodName.textContent = item.food_name;
+
+      const quantity = document.createElement("p");
+      quantity.textContent = "Quantity: " + item.quantity;
+
+      const amount = document.createElement("p");
+      amount.className = "price";
+      amount.textContent = "Amount: " + naira(item.line_total);
+
+      const currentStatus = document.createElement("p");
+      currentStatus.className = "status-label";
+      currentStatus.textContent =
+        "Status: " + item.vendor_status;
+
+      const select = document.createElement("select");
+
+      [
+        ["pending","Pending"],
+        ["preparing","Preparing"],
+        ["ready","Ready"],
+        ["delivered","Delivered"],
+        ["cancelled","Cancelled"]
+      ].forEach(option=>{
+        const opt = document.createElement("option");
+        opt.value = option[0];
+        opt.textContent = option[1];
+        select.appendChild(opt);
+      });
+
+      select.value = item.vendor_status;
+
+      const update = document.createElement("button");
+      update.textContent = "Update Status";
+
+      update.onclick = async ()=>{
+        update.disabled = true;
+        update.textContent = "Updating...";
+
+        const {error:updateError} = await client.rpc(
+          "update_vendor_order_status",
+          {
+            p_order_item_id:item.order_item_id,
+            p_status:select.value
+          }
+        );
+
+        if(updateError){
+          alert("Could not update status: " + updateError.message);
+          update.disabled = false;
+          update.textContent = "Update Status";
+          return;
+        }
+
+        alert("Order status updated successfully.");
+        loadOrders();
+      };
+
+      itemBox.append(
+        foodName,
+        quantity,
+        amount,
+        currentStatus,
+        select,
+        update
+      );
+
+      card.appendChild(itemBox);
+    });
+
+    list.appendChild(card);
+  });
 }
 
 async function logout(){
