@@ -1,0 +1,238 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Track Your Order - ChopLink</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  background: #fff8ef;
+  color: #292929;
+}
+
+header {
+  background: #f47b20;
+  color: white;
+  padding: 20px;
+  text-align: center;
+  border-radius: 12px;
+}
+
+.container {
+  max-width: 500px;
+  margin: 25px auto;
+  background: white;
+  padding: 22px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px #ddd;
+}
+
+input {
+  width: 100%;
+  padding: 14px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  background: #f47b20;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+#result {
+  margin-top: 20px;
+}
+
+.status {
+  background: #fff0df;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 15px 0;
+}
+
+.food {
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.error {
+  color: #c62828;
+}
+
+a {
+  color: #f47b20;
+  text-decoration: none;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>ChopLink</h1>
+  <p>Track Your Food Order</p>
+</header>
+
+<div class="container">
+  <h2>Check Your Order</h2>
+  <p>Enter your order ID and phone number.</p>
+
+  <input
+    type="text"
+    id="orderId"
+    placeholder="Enter your Order ID"
+  >
+
+  <input
+    type="tel"
+    id="phone"
+    placeholder="Enter your phone number"
+  >
+
+  <button id="trackButton" onclick="trackOrder()">
+    Track My Order
+  </button>
+
+  <div id="result"></div>
+
+  <p style="text-align:center;margin-top:25px">
+    <a href="customer-menu.html">Back to Food Menu</a>
+  </p>
+</div>
+
+<script>
+const SUPABASE_URL =
+  "https://ikpfnycvlbdgacrwqvwk.supabase.co";
+
+const SUPABASE_KEY =
+  "sb_publishable_az3jlI2hHW6BjtjWLfZGAw_wPnSj32T";
+
+const supabaseClient = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+
+async function trackOrder() {
+  const orderId = document.getElementById("orderId").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  const result = document.getElementById("result");
+  const button = document.getElementById("trackButton");
+
+  result.innerHTML = "";
+
+  if (!orderId || !phone) {
+    result.textContent = "Please enter your order ID and phone number.";
+    result.className = "error";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Checking order...";
+
+  try {
+    const { data, error } = await supabaseClient.rpc(
+      "track_choplink_order",
+      {
+        p_order_id: orderId,
+        p_phone: phone
+      }
+    );
+
+    if (error) throw error;
+
+    result.className = "";
+
+    const heading = document.createElement("h3");
+    heading.textContent = "Order Details";
+    result.appendChild(heading);
+
+    const statusBox = document.createElement("div");
+    statusBox.className = "status";
+
+    const statusTitle = document.createElement("strong");
+    statusTitle.textContent = "Order Status: " + data.status;
+    statusBox.appendChild(statusTitle);
+
+    result.appendChild(statusBox);
+
+    const total = document.createElement("p");
+    total.textContent =
+      "Total Amount: ₦" +
+      Number(data.total_amount).toLocaleString("en-NG");
+    result.appendChild(total);
+
+    const payment = document.createElement("p");
+    payment.textContent =
+      "Payment: " +
+      (data.payment_method === "cash_on_delivery"
+        ? "Cash on Delivery"
+        : "Online");
+    result.appendChild(payment);
+
+    const date = document.createElement("p");
+    date.textContent =
+      "Order Date: " + new Date(data.created_at).toLocaleString();
+    result.appendChild(date);
+
+    const itemsHeading = document.createElement("h3");
+    itemsHeading.textContent = "Your Meals";
+    result.appendChild(itemsHeading);
+
+    (data.items || []).forEach(item => {
+      const food = document.createElement("div");
+      food.className = "food";
+
+      const name = document.createElement("strong");
+      name.textContent = item.food_name;
+      food.appendChild(name);
+
+      const vendor = document.createElement("p");
+      vendor.textContent = "Restaurant: " + item.business_name;
+      food.appendChild(vendor);
+
+      const quantity = document.createElement("p");
+      quantity.textContent = "Quantity: " + item.quantity;
+      food.appendChild(quantity);
+
+      const itemStatus = document.createElement("p");
+      itemStatus.textContent =
+        "Meal Status: " + item.vendor_status;
+      food.appendChild(itemStatus);
+
+      result.appendChild(food);
+    });
+
+  } catch (error) {
+    result.className = "error";
+    result.textContent =
+      error.message || "Unable to find your order. Please check your details.";
+  }
+
+  button.disabled = false;
+  button.textContent = "Track My Order";
+}
+</script>
+
+</body>
+</html>
